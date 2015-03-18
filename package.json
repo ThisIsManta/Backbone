@@ -1,9 +1,9 @@
 {
   "name"          : "backbone",
-  "description"   : "Give your JS App some Backbone with Models, Views, Collections, and Events.",
+  "description"   : "Give your JavaScript App some Backbone with Models, Views, Collections, and Events.",
   "url"           : "http://backbonejs.org",
   "keywords"      : ["model", "view", "controller", "router", "server", "client", "browser"],
-  "author"        : "Jeremy Ashkenas <jeremy@documentcloud.org>",
+  "author"        : "Anantachai Saothong <anantachai.saothong@thomsonreuters.com>",
   "dependencies"  : {
     "underscore"  : ">=1.4.3"
   },
@@ -15,7 +15,7 @@
   "scripts": {
     "test": "phantomjs test/vendor/runner.js test/index.html?noglobals=true && coffee test/model.coffee",
     "build": "uglifyjs backbone.js --mangle --source-map backbone-min.map -o backbone-min.js",
-    "doc": "docco backbone.js && docco examples/todos/todos.js examples/backbone.localstorage.js",
+    "doc": "docco backbone.js",
     "lint": "jsl -nofilelisting -nologo -conf docs/jsl.conf -process backbone.js"
   },
   "main"          : "backbone.js",
@@ -23,6 +23,6 @@
   "license"       : "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jashkenas/backbone.git"
+    "url": "https://github.com/ThisIsManta/backbone.git"
   }
 }
