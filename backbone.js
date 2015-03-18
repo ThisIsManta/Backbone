@@ -1,4 +1,4 @@
-//     Backbone.js 1.1.1
+//     Backbone.js 1.1.2
 //     (c) 2010-2011 Jeremy Ashkenas, DocumentCloud Inc.
 //     (c) 2011-2013 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
 //     Backbone may be freely distributed under the MIT license.
@@ -36,7 +36,7 @@
 	var splice = array.splice;
 
 	// Current version of the library. Keep in sync with `package.json`.
-	Backbone.VERSION = '1.1.0';
+	Backbone.VERSION = '1.1.2';
 
 	// For Backbone's purposes, jQuery, Zepto, or Ender owns the `$` variable.
 	Backbone.$ = $;
@@ -76,11 +76,27 @@
 
 		// Bind an event to a `callback` function. Passing `"all"` will bind
 		// the callback to all events fired.
-		on: function(name, callback, context) {
+		on: function(name, callback, context, order) {
 			if (!eventsApi(this, 'on', name, [callback, context]) || !callback) return this;
 			this._events || (this._events = {});
 			var events = this._events[name] || (this._events[name] = []);
-			events.push({
+			var index;
+			if (order === 'FIRST') {
+				index = _.findLastIndex(events, function (event) { return event.order === 'FIRST'; });
+				index = index === -1 ? 0 : index + 1;
+			} else if (order === 'LAST') {
+				index = _.findIndex(events, function (event) { return event.order === 'LAST'; });
+				index = index === -1 ? events.length : index + 1;
+			} else {
+				order = null;
+				index = _.findIndex(events, function (event) { return event.order === 'LAST'; });
+				if (index === -1) {
+					index = _.findLastIndex(events, function (event) { return event.order === null; });
+					index = index === -1 ? events.length : index + 1;
+				}
+			}
+			events.splice(index, 0, {
+				order: order,
 				callback: callback,
 				context: context,
 				ctx: context || this
@@ -1043,7 +1059,6 @@
 		options = options || {};
 		
 		this.cid = _.uniqueId('view');
-		this.id = this.id || this.cid;
 		
 		// Merge everything from the argument.
 		_.extend(this, options);
@@ -1076,6 +1091,7 @@
 				var eventList = propertyName.split(',');
 				var index = -1;
 				while (++index < eventList.length) {
+					// Event name comprises `action [delay] [FIRST|LAST]@target` where action is one of the standard HTML events or custom event, delay in milliseconds, `FIRST` or `LAST` indicates order of events (if more than one events will be added; this works in case of `custom` event only) and query target or `custom`.
 					var eventName = eventList[index].trim();
 					if (eventName.indexOf('scroll') === 0) {
 						throw 'an event name "' + eventName + '" was not supported';
@@ -1084,7 +1100,7 @@
 						if (eventName.indexOf('@') > 0) {
 							var method = this[propertyName];
 							var chunks = _.compact(eventName.substring(0, eventName.indexOf('@')).split(' '));
-							if (chunks.length > 1 && !isNaN(chunks[chunks.length - 1]) && !(window.App && window.Appx.isTesting)) {
+							if (chunks.length > 1 && !isNaN(chunks[chunks.length - 1]) && !window.isTesting) {
 								method = _.debounce(method, parseInt(chunks[chunks.length - 1]));
 							}
 							
@@ -1095,7 +1111,10 @@
 							if (target === 'window') {
 								var broker;
 								if (windowEventCore._events === undefined || windowEventCore._events[action] === undefined) {
-									broker = _.debounce(_.bind(windowEventCore.trigger, windowEventCore, action), 100);
+									broker = _.bind(windowEventCore.trigger, windowEventCore, action);
+									if (!window.isTesting) {
+										broker = _.debounce(broker, 100);
+									}
 									$(window).on(action, broker);
 								} else {
 									broker = windowEventCore._events[action][0];
@@ -1117,7 +1136,11 @@
 								
 								// In case of custom event.
 							} else if (target === 'custom') {
-								this.on(action, method, this);
+								var order = null;
+								if (chunks.length > 1 && (chunks[1].toUpperCase() === 'FIRST' || chunks[1].toUpperCase() === 'LAST')) {
+									order  = chunks[1].toUpperCase();
+								}
+								this.on(action, method, this, order);
 								
 								// In case of component's HTML event.
 							} else {
@@ -1133,7 +1156,7 @@
 				delete this[propertyName];
 			}
 		}
-		this.events = _.extend({}, this.events, localEventHash);
+		this.events = _.extend({}, _.result(this, 'events'), localEventHash);
 		this.delegateEvents();
 	};
 
