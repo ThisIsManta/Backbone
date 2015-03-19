@@ -1,4 +1,4 @@
-//     Backbone.js 1.1.2
+//     Backbone.js 1.1.3
 //     (c) 2010-2011 Jeremy Ashkenas, DocumentCloud Inc.
 //     (c) 2011-2013 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
 //     Backbone may be freely distributed under the MIT license.
@@ -58,7 +58,7 @@
 	// `application/x-www-form-urlencoded` instead and will send the model in a
 	// form param named `model`.
 	Backbone.emulateJSON = false;
-
+	
 	// Backbone.Events
 	// ---------------
 
@@ -81,19 +81,21 @@
 			this._events || (this._events = {});
 			var events = this._events[name] || (this._events[name] = []);
 			var index;
-			if (order === 'FIRST') {
-				index = _.findLastIndex(events, function (event) { return event.order === 'FIRST'; });
-				index = index === -1 ? 0 : index + 1;
-			} else if (order === 'LAST') {
-				index = _.findIndex(events, function (event) { return event.order === 'LAST'; });
-				index = index === -1 ? events.length : index + 1;
-			} else {
+			if (order === undefined || order === null) {
 				order = null;
 				index = _.findIndex(events, function (event) { return event.order === 'LAST'; });
 				if (index === -1) {
 					index = _.findLastIndex(events, function (event) { return event.order === null; });
 					index = index === -1 ? events.length : index + 1;
 				}
+			} else if (order === 'FIRST') {
+				index = _.findLastIndex(events, function (event) { return event.order === 'FIRST'; });
+				index = index === -1 ? 0 : index + 1;
+			} else if (order === 'LAST') {
+				index = _.findIndex(events, function (event) { return event.order === 'LAST'; });
+				index = index === -1 ? events.length : index + 1;
+			} else {
+				index = events.length;
 			}
 			events.splice(index, 0, {
 				order: order,
@@ -106,7 +108,7 @@
 
 		// Bind an event to only be triggered a single time. After the first time
 		// the callback is invoked, it will be removed.
-		once: function(name, callback, context) {
+		once: function(name, callback, context, order) {
 			if (!eventsApi(this, 'once', name, [callback, context]) || !callback) return this;
 			var self = this;
 			var once = _.once(function() {
@@ -114,7 +116,7 @@
 				callback.apply(this, arguments);
 			});
 			once._callback = callback;
-			return this.on(name, once, context);
+			return this.on(name, once, context, order);
 		},
 
 		// Remove one or many callbacks. If `context` is null, removes all
@@ -265,6 +267,111 @@
 	// Allow the `Backbone` object to serve as a global event bus, for folks who
 	// want global "pubsub" in a convenient place.
 	_.extend(Backbone, Events);
+	
+	// Store a window-wide event(s).
+	var windowEventCore = _.extend({}, Events);
+	
+	// Allow the `Backbone` **Collection**, **Model** and **View** to bind events to the `window`, `document`, this `$el` (for **View** only) or even create custom events.
+	
+	// For example,
+	// `"onClickAtMainButton, click@button#main": function () { ... }`
+	// Above function will be fired, if and only if a button within the current component which has `main` as identity is clicked.
+	// Or, `this.onClickAtMainButton()` is called directly.
+	
+	// `"contextmenu unique-name-here 300@document": function () { ... }`
+	// Above function will be fired, if and only if user perform a right-click on the document (not only the current component) after 300 milliseconds.
+	// You can simply unbind above event by calling `jQuery.off('contextmenu.unique-name-here');`.
+	
+	// `"change@custom": function () { ... }`
+	// Above function will create a custom event `change` and it can be triggered by calling `this.trigger('change')`.
+	var naturalizeEvents = function () {
+		var viewEvents;
+		if (this instanceof View) {
+			viewEvents = {};
+		}
+		
+		this._unmanagedEventList = [];
+		
+		for (var propertyName in this) {
+			if (typeof this[propertyName] === 'function' && propertyName.indexOf('@') > 0) {
+				var eventList = propertyName.split(',');
+				var index = -1;
+				while (++index < eventList.length) {
+					// Event name comprises `action [delay] [FIRST|LAST]@target` where action is one of the standard HTML events or custom event, delay in milliseconds, `FIRST` or `LAST` indicates order of events (if more than one events will be added; this works in case of `custom` event only) and query target or `custom`.
+					var eventName = eventList[index].trim();
+					if (eventName.indexOf('scroll') === 0) {
+						throw new Error('an event name "' + eventName + '" was not supported');
+						
+					} else if (eventName.length > 0) {
+						if (eventName.indexOf('@') > 0) {
+							var method = this[propertyName];
+							var chunks = _.compact(eventName.substring(0, eventName.indexOf('@')).split(' '));
+							if (chunks.length > 1 && !isNaN(chunks[chunks.length - 1]) && !window.isTesting) {
+								method = _.debounce(method, parseInt(chunks[chunks.length - 1]));
+							}
+							
+							var action = chunks[0];
+							var target = eventName.substring(eventName.indexOf('@') + 1).trim();
+							
+							// In case of custom event.
+							if (target === 'custom' || target === '') {
+								var order = null;
+								if (chunks.length > 1 && (chunks[1].toUpperCase() === 'FIRST' || chunks[1].toUpperCase() === 'LAST')) {
+									order  = chunks[1].toUpperCase();
+								}
+								this.on(action, method, this, order);
+								
+								// In case of the current window event.
+							} else if (target === 'window') {
+								var broker;
+								if (windowEventCore._events === undefined || windowEventCore._events[action] === undefined) {
+									broker = _.bind(windowEventCore.trigger, windowEventCore, action);
+									if (!window.isTesting) {
+										broker = _.debounce(broker, 100);
+									}
+									$(window).on(action, broker);
+								} else {
+									broker = windowEventCore._events[action][0];
+								}
+								method = _.bind(method, this);
+								windowEventCore.on(action, method);
+								this._unmanagedEventList.push({ target: window, action: action, method: method, broker: broker });
+								
+								// In case of the other HTML event.
+							} else if (target.indexOf('document') === 0) {
+								method = _.bind(method, this);
+								if (target === 'document') {
+									$(document).on(action, method);
+								} else {
+									target = target.substring('document'.length).trim();
+									$(target).on(action, method);
+								}
+								this._unmanagedEventList.push({ target: target, action: action, method: method });
+								
+								// In case of View event.
+							} else if (viewEvents !== undefined) {
+								viewEvents[action + ' ' + target] = method;
+								
+								// Otherwise, throw an exception.
+							} else {
+								throw new Error('an event query target was invalid');
+							}
+							
+							// In case of component function alias.
+						} else {
+							this[eventName] = this[propertyName];
+						}
+					}
+				}
+				
+				delete this[propertyName];
+			}
+		}
+		
+		if (viewEvents !== undefined) {
+			this.events = _.extend({}, _.result(this, 'events'), viewEvents);
+		}
+	};
 
 	// Backbone.Model
 	// --------------
@@ -286,7 +393,9 @@
 		attrs = _.defaults({}, attrs, _.result(this, 'defaults'));
 		this.set(attrs, options);
 		this.changed = {};
+		naturalizeEvents.call(this);
 		this.initialize.apply(this, arguments);
+		this.trigger('initialized');
 	};
 
 	// Attach all inheritable methods to the Model prototype.
@@ -626,7 +735,7 @@
 	// -------------------
 
 	// If models tend to represent a single row of data, a Backbone Collection is
-	// more analagous to a table full of data ... or a small slice or page of that
+	// more similar to a table full of data ... or a small slice or page of that
 	// table, or a collection of rows that belong together for a particular reason
 	// -- all of the messages in this particular folder, all of the documents
 	// belonging to this particular author, and so on. Collections maintain
@@ -640,10 +749,12 @@
 		if (options.model) this.model = options.model;
 		if (options.comparator !== void 0) this.comparator = options.comparator;
 		this._reset();
+		naturalizeEvents.call(this);
 		this.initialize.apply(this, arguments);
-		if (models) this.reset(models, _.extend({
-			silent: true
-		}, options));
+		if (models) {
+			this.reset(models, _.extend({ silent: true }, options));
+		}
+		this.trigger('initialized');
 	};
 
 	// Default options for `Collection#set`.
@@ -896,7 +1007,7 @@
 		// normal circumstances, as the set will maintain sort order as each item
 		// is added.
 		sort: function(options) {
-			if (!this.comparator) throw new Error('Cannot sort a set without a comparator');
+			if (!this.comparator) throw new Error('a comparator was missing');
 			options || (options = {});
 
 			// Run sort based on type of `comparator`.
@@ -1042,9 +1153,6 @@
 	// Backbone.View
 	// -------------
 	
-	// Store an window-wide event(s).
-	var windowEventCore = _.extend({}, Events);
-	
 	// Backbone Views are almost more convention than they are actual code. A View
 	// is simply a JavaScript object that represents a logical chunk of UI in the
 	// DOM. This might be a single item, an entire list, a sidebar or panel, or
@@ -1056,7 +1164,7 @@
 	// Creating a Backbone.View creates its initial element outside of the DOM,
 	// if an existing element is not provided...
 	var View = Backbone.View = function(options) {
-		options = options || {};
+		options || (options = {});
 		
 		this.cid = _.uniqueId('view');
 		
@@ -1069,95 +1177,12 @@
 		
 		this._ensureElement();
 		
+		naturalizeEvents.call(this);
+		
 		this.initialize.apply(this, arguments);
 		
-		// Extract events from this view attributes and bind them to the window, document, this `$el` or even create custom events
-		
-		// For example,
-		// `"onClickAtMainButton, click@button#main": function () { ... }`
-		// Above function will be fired, if and only if a button within the current component which has `main` as identity is clicked.
-		// Or, `this.onClickAtMainButton()` is called directly.
-		
-		// `"contextmenu unique-name-here 300@document": function () { ... }`
-		// Above function will be fired, if and only if user perform a right-click on the document (not only the current component) after 300 milliseconds.
-		// You can simply unbind above event by calling `jQuery.off('contextmenu.unique-name-here');`.
-		
-		// `"change@custom": function () { ... }`
-		// Above function will create a custom event `change` and it can be triggered by calling `this.trigger('change')`.
-		this._unmanagedEventList = [];
-		var localEventHash = {};
-		for (var propertyName in this) {
-			if (typeof this[propertyName] === 'function' && propertyName.indexOf('@') > 0) {
-				var eventList = propertyName.split(',');
-				var index = -1;
-				while (++index < eventList.length) {
-					// Event name comprises `action [delay] [FIRST|LAST]@target` where action is one of the standard HTML events or custom event, delay in milliseconds, `FIRST` or `LAST` indicates order of events (if more than one events will be added; this works in case of `custom` event only) and query target or `custom`.
-					var eventName = eventList[index].trim();
-					if (eventName.indexOf('scroll') === 0) {
-						throw 'an event name "' + eventName + '" was not supported';
-						
-					} else if (eventName.length > 0) {
-						if (eventName.indexOf('@') > 0) {
-							var method = this[propertyName];
-							var chunks = _.compact(eventName.substring(0, eventName.indexOf('@')).split(' '));
-							if (chunks.length > 1 && !isNaN(chunks[chunks.length - 1]) && !window.isTesting) {
-								method = _.debounce(method, parseInt(chunks[chunks.length - 1]));
-							}
-							
-							var action = chunks[0];
-							var target = eventName.substring(eventName.indexOf('@') + 1).trim();
-							
-							// In case of the current window event.
-							if (target === 'window') {
-								var broker;
-								if (windowEventCore._events === undefined || windowEventCore._events[action] === undefined) {
-									broker = _.bind(windowEventCore.trigger, windowEventCore, action);
-									if (!window.isTesting) {
-										broker = _.debounce(broker, 100);
-									}
-									$(window).on(action, broker);
-								} else {
-									broker = windowEventCore._events[action][0];
-								}
-								method = _.bind(method, this);
-								windowEventCore.on(action, method);
-								this._unmanagedEventList.push({ target: window, action: action, method: method, broker: broker });
-								
-								// In case of the other HTML event.
-							} else if (target.indexOf('document') === 0) {
-								method = _.bind(method, this);
-								if (target === 'document') {
-									$(document).on(action, method);
-								} else {
-									target = target.substring('document'.length).trim();
-									$(target).on(action, method);
-								}
-								this._unmanagedEventList.push({ target: target, action: action, method: method });
-								
-								// In case of custom event.
-							} else if (target === 'custom') {
-								var order = null;
-								if (chunks.length > 1 && (chunks[1].toUpperCase() === 'FIRST' || chunks[1].toUpperCase() === 'LAST')) {
-									order  = chunks[1].toUpperCase();
-								}
-								this.on(action, method, this, order);
-								
-								// In case of component's HTML event.
-							} else {
-								localEventHash[action + ' ' + target] = method;
-							}
-							
-							// In case of component event.
-						} else {
-							this[eventName] = this[propertyName];
-						}
-					}
-				}
-				delete this[propertyName];
-			}
-		}
-		this.events = _.extend({}, _.result(this, 'events'), localEventHash);
-		this.delegateEvents();
+		this.delegateEvents(); 
+		this.trigger('initialized');
 	};
 
 	// Cached regex to split keys for `delegate`.
@@ -1592,7 +1617,7 @@
 		// Start the hash change handling, returning `true` if the current URL matches
 		// an existing route, and `false` otherwise.
 		start: function(options) {
-			if (History.started) throw new Error("Backbone.history has already been started");
+			if (History.started) throw new Error('Backbone.history has already been started');
 			History.started = true;
 
 			// Figure out the initial configuration. Do we need an iframe?
@@ -1811,7 +1836,7 @@
 
 	// Throw an error when a URL is needed, and none is supplied.
 	var urlError = function() {
-		throw new Error('A "url" property or function must be specified');
+		throw new Error('a "url" property or function must be specified');
 	};
 
 	// Wrap an optional error callback with a fallback error event.
