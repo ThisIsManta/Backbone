@@ -1,4 +1,4 @@
-//     Backbone.js 1.1.3
+//     Backbone.js 1.1.4
 //     (c) 2010-2011 Jeremy Ashkenas, DocumentCloud Inc.
 //     (c) 2011-2013 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
 //     Backbone may be freely distributed under the MIT license.
@@ -304,57 +304,63 @@
 						
 					} else if (eventName.length > 0) {
 						if (eventName.indexOf('@') > 0) {
-							var method = this[propertyName];
 							var chunks = _.compact(eventName.substring(0, eventName.indexOf('@')).split(' '));
+							var action = chunks[0];
+							var order = null;
+							var target = eventName.substring(eventName.indexOf('@') + 1).trim();
+							var method = this[propertyName];
+							
+							if (chunks.length > 1 && (chunks[1].toUpperCase() === 'FIRST' || chunks[1].toUpperCase() === 'LAST')) {
+								order  = chunks[1].toUpperCase();
+							}
+							
 							if (chunks.length > 1 && !isNaN(chunks[chunks.length - 1]) && !window.isTesting) {
 								method = _.debounce(method, parseInt(chunks[chunks.length - 1]));
 							}
 							
-							var action = chunks[0];
-							var target = eventName.substring(eventName.indexOf('@') + 1).trim();
-							
-							// In case of custom event.
-							if (target === 'custom' || target === '') {
-								var order = null;
-								if (chunks.length > 1 && (chunks[1].toUpperCase() === 'FIRST' || chunks[1].toUpperCase() === 'LAST')) {
-									order  = chunks[1].toUpperCase();
-								}
-								this.on(action, method, this, order);
+							// In case of **Model** or **Collection** custom event.
+							if (this instanceof Model || this instanceof Collection) {
+								this.on(action + target.length > 0 ? (':' + target) : '', method, this, order);
 								
-								// In case of the current window event.
-							} else if (target === 'window') {
-								var broker;
-								if (windowEventCore._events === undefined || windowEventCore._events[action] === undefined) {
-									broker = _.bind(windowEventCore.trigger, windowEventCore, action);
-									if (!window.isTesting) {
-										broker = _.debounce(broker, 100);
+							} else if (this instanceof View) {
+								// In case of **View** custom event.
+								if (target === 'custom' || target === '') {
+									this.on(action, method, this, order);
+									
+									// In case of the current window event.
+								} else if (target === 'window') {
+									var broker;
+									if (windowEventCore._events === undefined || windowEventCore._events[action] === undefined) {
+										broker = _.bind(windowEventCore.trigger, windowEventCore, action);
+										if (!window.isTesting) {
+											broker = _.debounce(broker, 100);
+										}
+										$(window).on(action, broker);
+									} else {
+										broker = windowEventCore._events[action][0];
 									}
-									$(window).on(action, broker);
+									windowEventCore.on(action, method, this, order);
+									this._unmanagedEventList.push({ target: window, action: action, method: method, broker: broker });
+									
+									// In case of the other HTML event.
+								} else if (target.indexOf('document') === 0) {
+									method = _.bind(method, this);
+									if (target === 'document') {
+										$(document).on(action, method);
+									} else {
+										target = target.substring('document'.length).trim();
+										$(target).on(action, method);
+									}
+									this._unmanagedEventList.push({ target: target, action: action, method: method });
+									
+									// In case of View event.
+								} else if (viewEvents !== undefined) {
+									viewEvents[action + ' ' + target] = method;
+									
+									// Otherwise, throw an exception.
 								} else {
-									broker = windowEventCore._events[action][0];
+									throw new Error('an event query target was invalid');
 								}
-								method = _.bind(method, this);
-								windowEventCore.on(action, method);
-								this._unmanagedEventList.push({ target: window, action: action, method: method, broker: broker });
-								
-								// In case of the other HTML event.
-							} else if (target.indexOf('document') === 0) {
-								method = _.bind(method, this);
-								if (target === 'document') {
-									$(document).on(action, method);
-								} else {
-									target = target.substring('document'.length).trim();
-									$(target).on(action, method);
-								}
-								this._unmanagedEventList.push({ target: target, action: action, method: method });
-								
-								// In case of View event.
-							} else if (viewEvents !== undefined) {
-								viewEvents[action + ' ' + target] = method;
-								
-								// Otherwise, throw an exception.
-							} else {
-								throw new Error('an event query target was invalid');
 							}
 							
 							// In case of component function alias.
@@ -395,7 +401,6 @@
 		this.changed = {};
 		naturalizeEvents.call(this);
 		this.initialize.apply(this, arguments);
-		this.trigger('initialized');
 	};
 
 	// Attach all inheritable methods to the Model prototype.
@@ -754,7 +759,6 @@
 		if (models) {
 			this.reset(models, _.extend({ silent: true }, options));
 		}
-		this.trigger('initialized');
 	};
 
 	// Default options for `Collection#set`.
@@ -1181,8 +1185,7 @@
 		
 		this.initialize.apply(this, arguments);
 		
-		this.delegateEvents(); 
-		this.trigger('initialized');
+		this.delegateEvents();
 	};
 
 	// Cached regex to split keys for `delegate`.
