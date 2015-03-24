@@ -110,16 +110,6 @@
     equal(model.url(), '/nested/1/collection/2');
   });
 
-  test("underscore methods", 5, function() {
-    var model = new Backbone.Model({ 'foo': 'a', 'bar': 'b', 'baz': 'c' });
-    var model2 = model.clone();
-    deepEqual(model.keys(), ['foo', 'bar', 'baz']);
-    deepEqual(model.values(), ['a', 'b', 'c']);
-    deepEqual(model.invert(), { 'a': 'foo', 'b': 'bar', 'c': 'baz' });
-    deepEqual(model.pick('foo', 'baz'), {'foo': 'a', 'baz': 'c'});
-    deepEqual(model.omit('foo', 'bar'), {'baz': 'c'});
-  });
-
   test("clone", 10, function() {
     var a = new Backbone.Model({ 'foo': 1, 'bar': 2, 'baz': 3});
     var b = a.clone();
@@ -155,18 +145,6 @@
   test("get", 2, function() {
     equal(doc.get('title'), 'The Tempest');
     equal(doc.get('author'), 'Bill Shakespeare');
-  });
-
-  test("escape", 5, function() {
-    equal(doc.escape('title'), 'The Tempest');
-    doc.set({audience: 'Bill & Bob'});
-    equal(doc.escape('audience'), 'Bill &amp; Bob');
-    doc.set({audience: 'Tim > Joan'});
-    equal(doc.escape('audience'), 'Tim &gt; Joan');
-    doc.set({audience: 10101});
-    equal(doc.escape('audience'), '10101');
-    doc.unset('audience');
-    equal(doc.escape('audience'), '');
   });
 
   test("has", 10, function() {

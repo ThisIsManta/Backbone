@@ -66,124 +66,6 @@
     equal(obj.counter, 5);
   });
 
-  test("listenTo and stopListening", 1, function() {
-    var a = _.extend({}, Backbone.Events);
-    var b = _.extend({}, Backbone.Events);
-    a.listenTo(b, 'all', function(){ ok(true); });
-    b.trigger('anything');
-    a.listenTo(b, 'all', function(){ ok(false); });
-    a.stopListening();
-    b.trigger('anything');
-  });
-
-  test("listenTo and stopListening with event maps", 4, function() {
-    var a = _.extend({}, Backbone.Events);
-    var b = _.extend({}, Backbone.Events);
-    var cb = function(){ ok(true); };
-    a.listenTo(b, {event: cb});
-    b.trigger('event');
-    a.listenTo(b, {event2: cb});
-    b.on('event2', cb);
-    a.stopListening(b, {event2: cb});
-    b.trigger('event event2');
-    a.stopListening();
-    b.trigger('event event2');
-  });
-
-  test("stopListening with omitted args", 2, function () {
-    var a = _.extend({}, Backbone.Events);
-    var b = _.extend({}, Backbone.Events);
-    var cb = function () { ok(true); };
-    a.listenTo(b, 'event', cb);
-    b.on('event', cb);
-    a.listenTo(b, 'event2', cb);
-    a.stopListening(null, {event: cb});
-    b.trigger('event event2');
-    b.off();
-    a.listenTo(b, 'event event2', cb);
-    a.stopListening(null, 'event');
-    a.stopListening();
-    b.trigger('event2');
-  });
-
-  test("listenToOnce and stopListening", 1, function() {
-    var a = _.extend({}, Backbone.Events);
-    var b = _.extend({}, Backbone.Events);
-    a.listenToOnce(b, 'all', function() { ok(true); });
-    b.trigger('anything');
-    b.trigger('anything');
-    a.listenToOnce(b, 'all', function() { ok(false); });
-    a.stopListening();
-    b.trigger('anything');
-  });
-
-  test("listenTo, listenToOnce and stopListening", 1, function() {
-    var a = _.extend({}, Backbone.Events);
-    var b = _.extend({}, Backbone.Events);
-    a.listenToOnce(b, 'all', function() { ok(true); });
-    b.trigger('anything');
-    b.trigger('anything');
-    a.listenTo(b, 'all', function() { ok(false); });
-    a.stopListening();
-    b.trigger('anything');
-  });
-
-  test("listenTo and stopListening with event maps", 1, function() {
-    var a = _.extend({}, Backbone.Events);
-    var b = _.extend({}, Backbone.Events);
-    a.listenTo(b, {change: function(){ ok(true); }});
-    b.trigger('change');
-    a.listenTo(b, {change: function(){ ok(false); }});
-    a.stopListening();
-    b.trigger('change');
-  });
-
-  test("listenTo yourself", 1, function(){
-    var e = _.extend({}, Backbone.Events);
-    e.listenTo(e, "foo", function(){ ok(true); });
-    e.trigger("foo");
-  });
-
-  test("listenTo yourself cleans yourself up with stopListening", 1, function(){
-    var e = _.extend({}, Backbone.Events);
-    e.listenTo(e, "foo", function(){ ok(true); });
-    e.trigger("foo");
-    e.stopListening();
-    e.trigger("foo");
-  });
-
-  test("stopListening cleans up references", 4, function() {
-    var a = _.extend({}, Backbone.Events);
-    var b = _.extend({}, Backbone.Events);
-    var fn = function() {};
-    a.listenTo(b, 'all', fn).stopListening();
-    equal(_.size(a._listeningTo), 0);
-    a.listenTo(b, 'all', fn).stopListening(b);
-    equal(_.size(a._listeningTo), 0);
-    a.listenTo(b, 'all', fn).stopListening(null, 'all');
-    equal(_.size(a._listeningTo), 0);
-    a.listenTo(b, 'all', fn).stopListening(null, null, fn);
-    equal(_.size(a._listeningTo), 0);
-  });
-
-  test("listenTo and stopListening cleaning up references", 2, function() {
-    var a = _.extend({}, Backbone.Events);
-    var b = _.extend({}, Backbone.Events);
-    a.listenTo(b, 'all', function(){ ok(true); });
-    b.trigger('anything');
-    a.listenTo(b, 'other', function(){ ok(false); });
-    a.stopListening(b, 'other');
-    a.stopListening(b, 'all');
-    equal(_.keys(a._listeningTo).length, 0);
-  });
-
-  test("listenTo with empty callback doesn't throw an error", 1, function(){
-    var e = _.extend({}, Backbone.Events);
-    e.listenTo(e, "foo", null);
-    e.trigger("foo");
-    ok(true);
-  });
-
   test("trigger all for each event", 3, function() {
     var a, b, obj = { counter: 0 };
     _.extend(obj, Backbone.Events);
@@ -416,10 +298,6 @@
     obj.trigger('event');
   });
 
-  test("Backbone object inherits Events", function() {
-    ok(Backbone.on === Backbone.Events.on);
-  });
-
   asyncTest("once with asynchronous events", 1, function() {
     var func = _.debounce(function() { ok(true); start(); }, 50);
     var obj = _.extend({}, Backbone.Events).once('async', func);
@@ -446,11 +324,12 @@
   });
 
   test("`once` on `all` should work as expected", 1, function() {
-    Backbone.once('all', function() {
+    var stub = _.extend({}, Backbone.Events);
+	stub.once('all', function() {
       ok(true);
-      Backbone.trigger('all');
+      stub.trigger('all');
     });
-    Backbone.trigger('all');
+    stub.trigger('all');
   });
 
   test("once without a callback is a noop", 0, function() {
@@ -459,19 +338,13 @@
 
   test("event functions are chainable", function() {
     var obj = _.extend({}, Backbone.Events);
-    var obj2 = _.extend({}, Backbone.Events);
     var fn = function() {};
     equal(obj, obj.trigger('noeventssetyet'));
     equal(obj, obj.off('noeventssetyet'));
-    equal(obj, obj.stopListening('noeventssetyet'));
     equal(obj, obj.on('a', fn));
     equal(obj, obj.once('c', fn));
     equal(obj, obj.trigger('a'));
-    equal(obj, obj.listenTo(obj2, 'a', fn));
-    equal(obj, obj.listenToOnce(obj2, 'b', fn));
     equal(obj, obj.off('a c'));
-    equal(obj, obj.stopListening(obj2, 'a'));
-    equal(obj, obj.stopListening());
   });
 
 })();

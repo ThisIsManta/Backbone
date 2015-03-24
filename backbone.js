@@ -1,4 +1,4 @@
-//     Backbone.js 1.1.4
+//     Backbone.js
 //     (c) 2010-2011 Jeremy Ashkenas, DocumentCloud Inc.
 //     (c) 2011-2013 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
 //     Backbone may be freely distributed under the MIT license.
@@ -36,7 +36,7 @@
 	var splice = array.splice;
 
 	// Current version of the library. Keep in sync with `package.json`.
-	Backbone.VERSION = '1.1.2';
+	Backbone.VERSION = '1.1.5';
 
 	// For Backbone's purposes, jQuery, Zepto, or Ender owns the `$` variable.
 	Backbone.$ = $;
@@ -166,22 +166,6 @@
 			return this;
 		},
 
-		// Tell this object to stop listening to either specific events ... or
-		// to every object it's currently listening to.
-		stopListening: function(obj, name, callback) {
-			var listeningTo = this._listeningTo;
-			if (!listeningTo) return this;
-			var remove = !name && !callback;
-			if (!callback && typeof name === 'object') callback = this;
-			if (obj)(listeningTo = {})[obj._listenId] = obj;
-			for (var id in listeningTo) {
-				obj = listeningTo[id];
-				obj.off(name, callback, this);
-				if (remove || _.isEmpty(obj._events)) delete this._listeningTo[id];
-			}
-			return this;
-		}
-
 	};
 
 	// Regular expression used to split event strings.
@@ -241,33 +225,13 @@
 		}
 	};
 
-	var listenMethods = {
-		listenTo: 'on',
-		listenToOnce: 'once'
-	};
-
-	// Inversion-of-control versions of `on` and `once`. Tell *this* object to
-	// listen to an event in another object ... keeping track of what it's
-	// listening to.
-	_.each(listenMethods, function(implementation, method) {
-		Events[method] = function(obj, name, callback) {
-			var listeningTo = this._listeningTo || (this._listeningTo = {});
-			var id = obj._listenId || (obj._listenId = _.uniqueId('l'));
-			listeningTo[id] = obj;
-			if (!callback && typeof name === 'object') callback = this;
-			obj[implementation](name, callback, this);
-			return this;
-		};
-	});
-
-	// Aliases for backwards compatibility.
+	// Aliases.
 	Events.bind = Events.on;
 	Events.unbind = Events.off;
+	Events.watch = Events.on;
+	Events.unwatch = Events.off;
+	Events.shell = Events.trigger;
 
-	// Allow the `Backbone` object to serve as a global event bus, for folks who
-	// want global "pubsub" in a convenient place.
-	_.extend(Backbone, Events);
-	
 	// Store a window-wide event(s).
 	var windowEventCore = _.extend({}, Events);
 	
@@ -278,8 +242,8 @@
 	// Above function will be fired, if and only if a button within the current component which has `main` as identity is clicked.
 	// Or, `this.onClickAtMainButton()` is called directly.
 	
-	// `"contextmenu unique-name-here 300@document": function () { ... }`
-	// Above function will be fired, if and only if user perform a right-click on the document (not only the current component) after 300 milliseconds.
+	// `"contextmenu 300@document": function () { ... }`
+	// Above function will be fired, if and only if user perform a right-click on the document (not only the current **View**) after 300 milliseconds.
 	// You can simply unbind above event by calling `jQuery.off('contextmenu.unique-name-here');`.
 	
 	// `"change@custom": function () { ... }`
@@ -434,11 +398,6 @@
 		// Get the value of an attribute.
 		get: function(attr) {
 			return this.attributes[attr];
-		},
-
-		// Get the HTML-escaped value of an attribute.
-		escape: function(attr) {
-			return _.escape(this.get(attr));
 		},
 
 		// Returns `true` if the attribute contains a value that is not null
@@ -724,18 +683,6 @@
 
 	});
 
-	// Underscore methods that we want to implement on the Model.
-	var modelMethods = ['keys', 'values', 'pairs', 'invert', 'pick', 'omit'];
-
-	// Mix in each Underscore method as a proxy to `Model#attributes`.
-	_.each(modelMethods, function(method) {
-		Model.prototype[method] = function() {
-			var args = slice.call(arguments);
-			args.unshift(this.attributes);
-			return _[method].apply(_, args);
-		};
-	});
-
 	// Backbone.Collection
 	// -------------------
 
@@ -786,7 +733,7 @@
 		// The JSON representation of a Collection is an array of the
 		// models' attributes.
 		toJSON: function(options) {
-			return this.map(function(model) {
+			return _.map(this.models, function(model) {
 				return model.toJSON(options);
 			});
 		},
@@ -814,7 +761,7 @@
 				if (!model) continue;
 				delete this._byId[model.id];
 				delete this._byId[model.cid];
-				index = this.indexOf(model);
+				index = _.indexOf(this.models, model);
 				this.models.splice(index, 1);
 				this.length--;
 				if (!options.silent) {
@@ -945,39 +892,6 @@
 			return models;
 		},
 
-		// Add a model to the end of the collection.
-		push: function(model, options) {
-			return this.add(model, _.extend({
-				at: this.length
-			}, options));
-		},
-
-		// Remove a model from the end of the collection.
-		pop: function(options) {
-			var model = this.at(this.length - 1);
-			this.remove(model, options);
-			return model;
-		},
-
-		// Add a model to the beginning of the collection.
-		unshift: function(model, options) {
-			return this.add(model, _.extend({
-				at: 0
-			}, options));
-		},
-
-		// Remove a model from the beginning of the collection.
-		shift: function(options) {
-			var model = this.at(0);
-			this.remove(model, options);
-			return model;
-		},
-
-		// Slice out a sub-array of models from the collection.
-		slice: function() {
-			return slice.apply(this.models, arguments);
-		},
-
 		// Get a model from the set by id.
 		get: function(obj) {
 			if (obj == null) return void 0;
@@ -989,24 +903,6 @@
 			return this.models[index];
 		},
 
-		// Return models with matching attributes. Useful for simple cases of
-		// `filter`.
-		where: function(attrs, first) {
-			if (_.isEmpty(attrs)) return first ? void 0 : [];
-			return this[first ? 'find' : 'filter'](function(model) {
-				for (var key in attrs) {
-					if (attrs[key] !== model.get(key)) return false;
-				}
-				return true;
-			});
-		},
-
-		// Return the first model with matching attributes. Useful for simple cases
-		// of `find`.
-		findWhere: function(attrs) {
-			return this.where(attrs, true);
-		},
-
 		// Force the collection to re-sort itself. You don't need to call this under
 		// normal circumstances, as the set will maintain sort order as each item
 		// is added.
@@ -1016,18 +912,13 @@
 
 			// Run sort based on type of `comparator`.
 			if (_.isString(this.comparator) || this.comparator.length === 1) {
-				this.models = this.sortBy(this.comparator, this);
+				this.models = _.sortBy(this.models, this.comparator, this);
 			} else {
 				this.models.sort(_.bind(this.comparator, this));
 			}
 
 			if (!options.silent) this.trigger('sort', this, options);
 			return this;
-		},
-
-		// Pluck an attribute from each model in the collection.
-		pluck: function(attr) {
-			return _.invoke(this.models, 'get', attr);
 		},
 
 		// Fetch the default set of models for this collection, resetting the
@@ -1121,39 +1012,6 @@
 
 	});
 
-	// Underscore methods that we want to implement on the Collection.
-	// 90% of the core usefulness of Backbone Collections is actually implemented
-	// right here:
-	var methods = ['forEach', 'each', 'map', 'collect', 'reduce', 'foldl',
-		'inject', 'reduceRight', 'foldr', 'find', 'detect', 'filter', 'select',
-		'reject', 'every', 'all', 'some', 'any', 'include', 'contains', 'invoke',
-		'max', 'min', 'toArray', 'size', 'first', 'head', 'take', 'initial', 'rest',
-		'tail', 'drop', 'last', 'without', 'difference', 'indexOf', 'shuffle',
-		'lastIndexOf', 'isEmpty', 'chain'
-	];
-
-	// Mix in each Underscore method as a proxy to `Collection#models`.
-	_.each(methods, function(method) {
-		Collection.prototype[method] = function() {
-			var args = slice.call(arguments);
-			args.unshift(this.models);
-			return _[method].apply(_, args);
-		};
-	});
-
-	// Underscore methods that take a property name as an argument.
-	var attributeMethods = ['groupBy', 'countBy', 'sortBy'];
-
-	// Use attributes instead of properties.
-	_.each(attributeMethods, function(method) {
-		Collection.prototype[method] = function(value, context) {
-			var iterator = _.isFunction(value) ? value : function(model) {
-				return model.get(value);
-			};
-			return _[method](this.models, iterator, context);
-		};
-	});
-
 	// Backbone.View
 	// -------------
 	
@@ -1185,7 +1043,7 @@
 		
 		this.initialize.apply(this, arguments);
 		
-		this.delegateEvents();
+		this.delegateEvents(this.events);
 	};
 
 	// Cached regex to split keys for `delegate`.
@@ -1269,7 +1127,7 @@
 			this._unmanagedEventList.splice(0, this._unmanagedEventList.length);
 			
 			// Unbind custom event(s) of this view.
-			this.stopListening();
+			this.off();
 			
 			// Remove child-parent references of this view.
 			if (this.parent !== null && typeof this.parent === 'object' && !(this.parent instanceof Array)) {

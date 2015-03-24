@@ -50,7 +50,7 @@
   });
 
   test("update", 7, function() {
-    library.first().save({id: '1-the-tempest', author: 'William Shakespeare'});
+    library.models[0].save({id: '1-the-tempest', author: 'William Shakespeare'});
     equal(this.ajaxSettings.url, '/library/1-the-tempest');
     equal(this.ajaxSettings.type, 'PUT');
     equal(this.ajaxSettings.dataType, 'json');
@@ -62,7 +62,7 @@
   });
 
   test("update with emulateHTTP and emulateJSON", 7, function() {
-    library.first().save({id: '2-the-tempest', author: 'Tim Shakespeare'}, {
+    library.models[0].save({id: '2-the-tempest', author: 'Tim Shakespeare'}, {
       emulateHTTP: true,
       emulateJSON: true
     });
@@ -77,7 +77,7 @@
   });
 
   test("update with just emulateHTTP", 6, function() {
-    library.first().save({id: '2-the-tempest', author: 'Tim Shakespeare'}, {
+    library.models[0].save({id: '2-the-tempest', author: 'Tim Shakespeare'}, {
       emulateHTTP: true
     });
     equal(this.ajaxSettings.url, '/library/2-the-tempest');
@@ -90,7 +90,7 @@
   });
 
   test("update with just emulateJSON", 6, function() {
-    library.first().save({id: '2-the-tempest', author: 'Tim Shakespeare'}, {
+    library.models[0].save({id: '2-the-tempest', author: 'Tim Shakespeare'}, {
       emulateJSON: true
     });
     equal(this.ajaxSettings.url, '/library/2-the-tempest');
@@ -103,24 +103,24 @@
   });
 
   test("read model", 3, function() {
-    library.first().save({id: '2-the-tempest', author: 'Tim Shakespeare'});
-    library.first().fetch();
+    library.models[0].save({id: '2-the-tempest', author: 'Tim Shakespeare'});
+    library.models[0].fetch();
     equal(this.ajaxSettings.url, '/library/2-the-tempest');
     equal(this.ajaxSettings.type, 'GET');
     ok(_.isEmpty(this.ajaxSettings.data));
   });
 
   test("destroy", 3, function() {
-    library.first().save({id: '2-the-tempest', author: 'Tim Shakespeare'});
-    library.first().destroy({wait: true});
+    library.models[0].save({id: '2-the-tempest', author: 'Tim Shakespeare'});
+    library.models[0].destroy({wait: true});
     equal(this.ajaxSettings.url, '/library/2-the-tempest');
     equal(this.ajaxSettings.type, 'DELETE');
     equal(this.ajaxSettings.data, null);
   });
 
   test("destroy with emulateHTTP", 3, function() {
-    library.first().save({id: '2-the-tempest', author: 'Tim Shakespeare'});
-    library.first().destroy({
+    library.models[0].save({id: '2-the-tempest', author: 'Tim Shakespeare'});
+    library.models[0].destroy({
       emulateHTTP: true,
       emulateJSON: true
     });
