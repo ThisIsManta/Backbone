@@ -36,7 +36,7 @@
 	var splice = array.splice;
 
 	// Current version of the library. Keep in sync with `package.json`.
-	Backbone.VERSION = '1.1.5';
+	Backbone.VERSION = '1.1.6';
 
 	// For Backbone's purposes, jQuery, Zepto, or Ender owns the `$` variable.
 	Backbone.$ = $;
@@ -73,7 +73,6 @@
 	//     object.trigger('expand');
 	//
 	var Events = Backbone.Events = {
-
 		// Bind an event to a `callback` function. Passing `"all"` will bind
 		// the callback to all events fired.
 		on: function(name, callback, context, order) {
@@ -1043,6 +1042,15 @@
 		
 		this.initialize.apply(this, arguments);
 		
+		if (this.render !== undefined && this._render === undefined) {
+			this._render = this.render;
+			this.render = function () {
+				this._render();
+				this.isRendered = true;
+				return this;
+			};
+		}
+		
 		this.delegateEvents(this.events);
 	};
 
@@ -1068,10 +1076,7 @@
 		// **render** is the core function that your view should override, in order
 		// to populate its element (`this.el`), with the appropriate HTML. The
 		// convention is for **render** to always return `this`.
-		render: function() {
-			this.isRendered = true;
-			return this;
-		},
+		render: function() {},
 		
 		// Show the view and set `this.isVisible` flag to `true`.
 		show: function () {
