@@ -163,8 +163,7 @@
 			if (events) triggerEvents(events, args);
 			if (allEvents) triggerEvents(allEvents, arguments);
 			return this;
-		},
-
+		}
 	};
 
 	// Regular expression used to split event strings.
@@ -1076,18 +1075,24 @@
 		// **render** is the core function that your view should override, in order
 		// to populate its element (`this.el`), with the appropriate HTML. The
 		// convention is for **render** to always return `this`.
-		render: function() {},
+		render: function () {
+			return this;
+		},
 		
 		// Show the view and set `this.isVisible` flag to `true`.
 		show: function () {
 			this.$el.show();
 			this.isVisible = true;
+
+			return this;
 		},
 		
 		// Hide the view and set `this.isVisible` flag to `false`.
 		hide: function () {
 			this.$el.hide();
 			this.isVisible = false;
+
+			return this;
 		},
 		
 		// Find an inner view of a given `id`.
