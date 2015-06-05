@@ -766,7 +766,6 @@
 					options.index = index;
 					model.trigger('remove', model, this, options);
 				}
-				this._removeReference(model);
 			}
 			return singular ? models[0] : models;
 		},
@@ -878,9 +877,6 @@
 		// Useful for bulk operations and optimizations.
 		reset: function(models, options) {
 			options || (options = {});
-			for (var i = 0, l = this.models.length; i < l; i++) {
-				this._removeReference(this.models[i]);
-			}
 			options.previousModels = this.models;
 			this._reset();
 			models = this.add(models, _.extend({
@@ -1083,7 +1079,6 @@
 		show: function () {
 			this.$el.show();
 			this.isVisible = true;
-
 			return this;
 		},
 		
@@ -1091,7 +1086,6 @@
 		hide: function () {
 			this.$el.hide();
 			this.isVisible = false;
-
 			return this;
 		},
 		
