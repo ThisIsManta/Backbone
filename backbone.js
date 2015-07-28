@@ -1077,7 +1077,10 @@
 		
 		// Show the view and set `this.isVisible` flag to `true`.
 		show: function () {
-			this.$el.show();
+			this.$el.css('display', '');
+			if (this.$el.css('display') === 'none') {
+				this.$el.show();
+			}
 			this.isVisible = true;
 			return this;
 		},
