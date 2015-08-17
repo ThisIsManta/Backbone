@@ -232,6 +232,7 @@
 
 	// Store a window-wide event(s).
 	var windowEventCore = _.extend({}, Events);
+	window.WEC = windowEventCore;
 	
 	// Allow the `Backbone` **Collection**, **Model** and **View** to bind events to the `window`, `document`, this `$el` (for **View** only) or even create custom events.
 	
@@ -246,16 +247,19 @@
 	
 	// `"change@custom": function () { ... }`
 	// Above function will create a custom event `change` and it can be triggered by calling `this.trigger('change')`.
-	var naturalizeEvents = function () {
-		var viewEvents;
-		if (this instanceof View) {
-			viewEvents = {};
+	var assembleEvents = function (scope) {
+	    if (scope.__class__._formalEventList !== undefined) {
+			return;
 		}
 		
-		this._unmanagedEventList = [];
+		scope.__class__._formalEventList = [];
+		scope.__class__._windowEventList = [];
+		scope.__class__._objectEventList = [];
+		scope.__class__._domobjEventHash = {};
+		scope.__class__._normalEventHash = {};
 		
-		for (var propertyName in this) {
-			if (typeof this[propertyName] === 'function' && propertyName.indexOf('@') > 0) {
+		for (var propertyName in scope) {
+			if (typeof scope[propertyName] === 'function' && propertyName.indexOf('@') > 0) {
 				var eventList = propertyName.split(',');
 				var index = -1;
 				while (++index < eventList.length) {
@@ -270,7 +274,7 @@
 							var action = chunks[0];
 							var order = null;
 							var target = eventName.substring(eventName.indexOf('@') + 1).trim();
-							var method = this[propertyName];
+							var method = scope[propertyName];
 							
 							if (chunks.length > 1 && (chunks[1].toUpperCase() === 'FIRST' || chunks[1].toUpperCase() === 'LAST')) {
 								order  = chunks[1].toUpperCase();
@@ -281,63 +285,91 @@
 							}
 							
 							// In case of **Model** or **Collection** custom event.
-							if (this instanceof Model || this instanceof Collection) {
-								this.on(action + (target.length > 0 ? ':' : '') + target, method, this, order);
+							if (scope instanceof Model || scope instanceof Collection) {
+								scope.__class__._formalEventList.push([action + (target.length > 0 ? ':' : '') + target, method, null, order]);
 								
-							} else if (this instanceof View) {
+							} else if (scope instanceof View) {
 								// In case of **View** custom event.
 								if (target === 'custom' || target === '') {
-									this.on(action, method, this, order);
+									scope.__class__._formalEventList.push([action, method, null, order]);
 									
 									// In case of the current window event.
 								} else if (target === 'window') {
-									var broker;
-									if (windowEventCore._events === undefined || windowEventCore._events[action] === undefined) {
-										broker = _.bind(windowEventCore.trigger, windowEventCore, action);
-										if (!window.isTesting) {
-											broker = _.debounce(broker, 100);
-										}
-										$(window).on(action, broker);
-									} else {
-										broker = windowEventCore._events[action][0];
-									}
-									windowEventCore.on(action, method, this, order);
-									this._unmanagedEventList.push({ target: window, action: action, method: method, broker: broker });
+									scope.__class__._windowEventList.push([action, method, null, order]);
 									
 									// In case of the other HTML event.
 								} else if (target.indexOf('document') === 0) {
-									method = _.bind(method, this);
-									if (target === 'document') {
-										$(document).on(action, method);
-									} else {
-										target = target.substring('document'.length).trim();
-										$(target).on(action, method);
-									}
-									this._unmanagedEventList.push({ target: target, action: action, method: method });
+									scope.__class__._objectEventList.push([target, action, method]);
 									
 									// In case of View event.
-								} else if (viewEvents !== undefined) {
-									viewEvents[action + ' ' + target] = method;
-									
-									// Otherwise, throw an exception.
 								} else {
-									throw new Error('an event query target was invalid');
+									scope.__class__._domobjEventHash[action + ' ' + target] = method;
 								}
 							}
 							
 							// In case of component function alias.
 						} else {
-							this[eventName] = this[propertyName];
+							scope.__class__._normalEventHash[eventName] = scope[propertyName];
 						}
 					}
 				}
 				
-				delete this[propertyName];
+				delete scope[propertyName];
 			}
 		}
+	};
+	
+	var energizeEvents = function (scope) {
+		var items, index, action, method, broker, target;
 		
-		if (viewEvents !== undefined) {
-			this.events = _.extend({}, _.result(this, 'events'), viewEvents);
+		items = scope.__class__._formalEventList;
+		index = -1;
+		while (++index < items.length) {
+			items[index][2] = scope;
+			scope.on.apply(scope, items[index]);
+		}
+		
+		_.extend(scope, scope.__class__._normalEventHash);
+		
+		if (scope instanceof View) {
+			scope._unmanagedEventList = [];
+			
+			items = scope.__class__._windowEventList;
+			index = -1;
+			while (++index < items.length) {
+				action = items[index][0];
+				method = items[index][1];
+				if (windowEventCore._events === undefined || windowEventCore._events[action] === undefined) {
+					broker = _.bind(windowEventCore.trigger, windowEventCore, action);
+					if (!window.isTesting) {
+						broker = _.debounce(broker, 100);
+					}
+					$(window).on(action, broker);
+					
+				} else {
+					broker = windowEventCore._events[action][0];
+				}
+				windowEventCore.on(action, method, scope);
+				scope._unmanagedEventList.push({ target: window, action: action, method: method, broker: broker });
+			}
+			
+			items = scope.__class__._objectEventList;
+			index = -1;
+			while (++index < items.length) {
+				target = items[index][0];
+				action = items[index][1];
+				method = _.bind(items[index][2], scope);
+				if (target === 'document') {
+					$(document).on(action, method);
+					
+				} else {
+					target = target.substring('document'.length).trim();
+					$(target).on(action, method);
+				}
+				scope._unmanagedEventList.push({ target: target, action: action, method: method });
+			}
+			
+			scope.events = _.extend({}, _.result(scope, 'events'), scope.__class__._domobjEventHash);
 		}
 	};
 
@@ -361,7 +393,10 @@
 		attrs = _.defaults({}, attrs, _.result(this, 'defaults'));
 		this.set(attrs, options);
 		this.changed = {};
-		naturalizeEvents.call(this);
+		if (this.__class__ !== undefined) {
+		    assembleEvents(this);
+		    energizeEvents(this);
+		}
 		this.initialize.apply(this, arguments);
 	};
 
@@ -699,7 +734,10 @@
 		if (options.model) this.model = options.model;
 		if (options.comparator !== void 0) this.comparator = options.comparator;
 		this._reset();
-		naturalizeEvents.call(this);
+		if (this.__class__ !== undefined) {
+		    assembleEvents(this);
+		    energizeEvents(this);
+		}
 		this.initialize.apply(this, arguments);
 		if (models) {
 			this.reset(models, _.extend({ silent: true }, options));
@@ -1033,7 +1071,10 @@
 		
 		this._ensureElement();
 		
-		naturalizeEvents.call(this);
+		if (this.__class__ !== undefined) {
+		    assembleEvents(this);
+		    energizeEvents(this);
+		}
 		
 		this.initialize.apply(this, arguments);
 		
@@ -1671,6 +1712,7 @@
 		// by us to simply call the parent's constructor.
 		if (protoProps && _.has(protoProps, 'constructor')) {
 			child = protoProps.constructor;
+			
 		} else {
 			child = function() {
 				return parent.apply(this, arguments);
@@ -1696,6 +1738,8 @@
 		// later.
 		child.__super__ = parent.prototype;
 
+		child.prototype.__class__ = child;
+		
 		return child;
 	};
 
