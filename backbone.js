@@ -342,7 +342,7 @@
 				if (windowEventCore._events === undefined || windowEventCore._events[action] === undefined) {
 					broker = _.bind(windowEventCore.trigger, windowEventCore, action);
 					if (!window.isTesting) {
-						broker = _.debounce(broker, 100);
+						broker = _.debounce(broker, 300, { leading: true, trailing: false });
 					}
 					$(window).on(action, broker);
 
