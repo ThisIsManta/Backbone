@@ -92,7 +92,7 @@
 				index = index === -1 ? 0 : index + 1;
 			} else if (order === 'LAST') {
 				index = _.findIndex(events, function (event) { return event.order === 'LAST'; });
-				index = index === -1 ? events.length : index + 1;
+				index = index === -1 ? events.length : index;
 			} else {
 				index = events.length;
 			}
